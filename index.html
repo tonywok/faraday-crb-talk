@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+
+<!--
+  Google HTML5 slide template
+
+  Authors: Luke Mahé (code)
+           Marcin Wichary (code and design)
+
+           Dominic Mazzoni (browser compatibility)
+           Charles Chen (ChromeVox support)
+
+  URL: http://code.google.com/p/html5slides/
+-->
+
+<html>
+  <head>
+    <title>Faraday</title>
+    <meta charset='utf-8'/>
+    <script src='http://html5slides.googlecode.com/svn/trunk/slides.js'></script>
+  </head>
+  <style>
+    body {
+      display: none;
+    }
+  </style>
+  <body>
+    <section class='slides layout-regular'>
+      <article>
+        <h1>HTTP, do you speak it?</h1>
+        <br/>
+        <img src="http://3.bp.blogspot.com/-e878r1wcYFA/Tbi2iktlu3I/AAAAAAAAAJw/z6FUlYTmMZw/s1600/samuel_l._jackson_pulp_fiction.jpg"></img>
+      </article>
+
+      <article>
+        <h3>Some Common Tasks</h3>
+        <ul>
+          <li> Content-Type parsing &amp; encoding </li>
+          <li> Basic Authentication </li>
+          <li> OAuth 1.0 </li>
+          <li> OAuth 2.0 </li>
+          <li> Custom Response Handling </li>
+          <li> Caching </li>
+          <li> SSL </li>
+          <li> Random_dude42's sweet home rolled API. </li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>Ruby HTTP Libraries/Gems We All Use</h3>
+        <ul>
+          <li> Net::HTTP </li>
+          <li> HTTParty </li>
+          <li> RestClient </li>
+          <li> FARADAY! </li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>Rack</h3>
+        <ul>
+          <li> Our buddies Rails &amp; Sinatra </li>
+          <li> A common interface for ruby to interact w/ web servers </li>
+          <li> Has the concept of Middleware </li>
+          <li> Extensible by adding middleware to the "stack" </li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>Faraday!</h3>
+        <ul>
+          <li> A common interface for ruby to speak HTTP </li>
+          <li> Has adapters for the many ruby HTTP libs </li>
+          <li> Also has the concept of middleware </li>
+          <li> Extensible by adding middleware to the request/response stacks </li>
+          <li> Lots of middleware availble (faraday_middleware gem) </li>
+        </ul>
+      </article>
+
+      <article>
+        <h3> Basic Faraday API </h3>
+        <pre>
+conn = Faraday.new(url: "http://api.foobars.com/v0")
+
+conn.get("/posts")
+conn.get("/posts", { with: "params" })
+
+conn.post("/posts", { title: "Test", body: "ipsum dolor sit amet" })
+conn.post do |req|
+  req.url "/posts"
+  req.headers["X-Custom-Header"] = "Ballin'"
+  req.body = '{ "title" : "Test", "body" : "lorem" }'
+end
+        </pre>
+      </article>
+
+      <article>
+        <h3> Adapters! </h3>
+        <ul>
+          <li> net/http </li>
+          <li> net_http_persistent </li>
+          <li> httpclient </li>
+          <li> em_http </li>
+          <li> typhoeous </li>
+          <li> Probably more... </li>
+        </ul>
+      </article>
+
+      <article>
+        <h3>Scenario #1: <span style="font-weight: lighter;">OAuth 2.0 &amp; OAuth 1.0</h3>
+        <pre>
+connection = Faraday.new(url: "http://api.foobars.com/v0") do |conn|
+  # This will add an access_token parameter &amp; OAuth2 Token header
+  conn.request :oauth2
+end
+# i.e
+resp = connection.get("/resources", access_token: "mX3axFj1xaA")
+        </pre>
+        <pre>
+connection = Faraday.new(url: "http://api.foobars.com/v0") do |conn|
+  conn.request(:oauth, {
+    consumer_key: "abc",
+    consumer_secret: "123",
+    token: "def",
+    token_secret: "456"
+  })
+end
+        </pre>
+      </article>
+
+      <article>
+        <h3>Scenario #2: <span style="font-weight: lighter;"> Making requests over SSL </span></h3>
+        <pre>
+connection = Faraday.new('https://example.com', ssl: {
+  client_cert: ...,
+  client_key: ...,
+  ca_file: ...,
+  ca_path: ...,
+  cert_store: ...
+})
+        </pre>
+      </article>
+
+      <article>
+        <h3>Scenario #4: <span style="font-weight: lighter;"> JSON "secured" over Basic Auth</span></h3>
+        <pre>
+connection = Faraday.new(url: "http://api.foobars.com/v0") do |conn|
+  # basic auth username/password
+  conn.request :basic_auth, "tony@neo.com", "totesmybankpassword!"
+  # json encode our requests
+  conn.request :json
+
+  # json decode their responses
+  conn.response :json
+
+  # use the net/http adapter (default)
+  conn.adapter :net_http
+end
+        </pre>
+      </article>
+
+      <article>
+        <h3>Scenario #5: <span style="font-weight: lighter;">Adding custom middleware</span></h3>
+        <pre>
+
+connection = Faraday.new(url: "http://api.foobars.com/v0") do |conn|
+  conn.request :oauth2
+
+  # Custom response middlware class
+  conn.use AwesomeGem::Response::TonysErrors
+
+  conn.adapter :em_http
+end
+        </pre>
+      </article>
+
+      <article>
+        <h3> Custom Middleware </h3>
+        <pre>
+module AwesomeGem
+  # custom error class definitions ServerError and ClientError go here
+  module Response
+    class TonysError < Faraday::Response::Middleware
+      def initialize(app); super(app); end
+
+      def on_complete
+        case code = response[:status]
+          when 400..499 then
+            body = response[:body]
+            if body.respond_to?(:has_key?) && body.has_key?("message")
+              message = body["message"]
+            else
+              message = 'Client error'
+            end
+            raise ClientError.new(message, code, response[:body])
+          when 500..599 then
+            raise ServerError.new('Server Error', code)
+          end
+        end
+        </pre>
+      </article>
+
+      <article>
+        <h3> Testability </h3>
+        <ul>
+          <li>
+            Simple stubbing
+            <pre>
+# To configure:
+#   connection.adapter :test
+stubs = Faraday::Adapter::Test::Stubs.new do |stub|
+  stub.get('/foobars') { [200, {}, 'yo dawg'] }
+end
+            </pre>
+          </li>
+          <li>
+            Using the rack adapter
+            <pre>
+# To configure:
+#   connection.adapter :rack, SomeApp
+class SomeApp < Sinatra::Base
+  get '/foobars' do
+    # respond with something
+  end
+end
+            </pre>
+          </li>
+        </ul>
+      </article>
+
+      <article>
+        <h3> Sources </h3>
+        <ul>
+          <li> https://github.com/technoweenie/faraday </li>
+          <li> https://github.com/pengwynn/faraday_middleware/ </li>
+        </ul>
+        <br/>
+        <br/>
+        <center><img src="http://favim.com/orig/201105/12/beautiful-cat-cute-dog-love-owwn-Favim.com-41407.jpg"></img></center>
+        <center> Be cool to everyone, ya'll :) </center>
+      </article>
+
+      <article>
+        <h1>404: Not Found</h1>
+        <h3>The page you were looking for doesn't exist.</h3>
+        <p> Thanks - @tonywok </p>
+      </article>
+
+    </section>
+  </body>
+</html>
